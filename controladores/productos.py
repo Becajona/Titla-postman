@@ -8,7 +8,9 @@ from bson.objectid import ObjectId
 import json
 from flask import request
 from bson import ObjectId
-
+from flask import Flask
+from flask_cors import CORS
+from flask_pymongo import PyMongo
 
 # ________________________________________________________________________________________
 prod = Blueprint("products", __name__)
@@ -55,10 +57,6 @@ def obtener_PorNombre(nombre):
     except Exception as e:
         # Manejo de la excepción, puedes personalizar el mensaje de error según tus necesidades
         return jsonify({"error": str(e)}), 500
-
-if __name__ == '__main__':
-    app.run(debug=True)
-
 # __________________________________________________________________________________________
 
 #http://192.168.1.67:4000/productos/porID/65b11507d66a2764b2c2740f
@@ -86,56 +84,59 @@ def obtener_PorID(id):
 
 # ________________________________________________________________________________________________
 
+from flask import Flask, request, jsonify
+from flask_pymongo import PyMongo
+from bson import ObjectId
+from datetime import datetime
+
+app = Flask(__name__)
+app.config['MONGO_URI'] = 'mongodb+srv://ros:ros2021@cluster0.ymcp4od.mongodb.net/db_administrator?retryWrites=true&w=majority'
+mongo = PyMongo(app)
 
 @app.route('/productos/nuevoProd', methods=['POST'])
 def add_producto():
     try:
-        # Obtener datos del JSON enviado en la solicitud
-        n = request.json["nombre"]
-        cat = request.json["categoria"]["categoria"]
-        desc = request.json["categoria"]["tipo"]
-        cos = request.json["costo"]
-        pre = request.json["precio"]
-        f = request.json['foto']
-        fecha_str_adq = request.json["fechaAdquisicion"]["$date"]
-        fechaAdq = datetime.utcfromtimestamp(int(fecha_str_adq) / 1000.0)
-        ce = request.json["cantidadExistente"]
-        e = request.json["estado"]
-        orig = request.json["origen"]
-        provId = ObjectId(request.json["provId"])  # Convert provId to ObjectId
-        marcasId = [ObjectId(m) for m in request.json["marcasId"]]  # Convert marcasId list to ObjectId
+        data = request.json
 
-        if request.method == 'POST':
-            product = {
-                "nombre": n,
-                "categoria": {"categoria": cat, "tipo": desc},
-                "costo": cos,
-                "precio": pre,
-                "foto": f,
-                "fechaAdquisicion": fechaAdq,
-                "cantidadExistente": ce,
-                "estado": e,
-                "origen": orig,
-                "provId": provId,
-                "marcasId": marcasId
+        # Validación de campos requeridos
+        required_fields = ['nombre', 'categoria', 'costo', 'precio', 'foto', 'fechaAdquisicion', 'cantidadExistente', 'estado', 'origen', 'provId', 'marcasId']
+        if not all(field in data for field in required_fields):
+            return jsonify({"error": "Campos requeridos faltantes"}), 400
+
+        # Convertir fecha de adquisición
+        fecha_str_adq = {"$date": "2024-05-01T00:00:00Z"}
+        fechaAdq = datetime.utcfromtimestamp(int(fecha_str_adq) / 1000.0)
+
+        product = {
+            "nombre": "Ejemplo de Producto",
+            "categoria": {"categoria": "Adultos", "tipo": "EjemploTipo"},
+            "costo": 50.0,
+            "precio": 89.99,
+            "foto": "ejemplo_producto.jpg",
+            "fechaAdquisicion": fechaAdq,
+            "cantidadExistente": 10.0,
+            "estado": "Vigente",
+            "origen": "Proveedor de Ejemplo",
+            "provId": ObjectId("5f7f1c1b014b6a5711fdb16c"),  # Se debe reemplazar con el ObjectId correcto
+            "marcasId": [ObjectId("5f7f1c1b014b6a5711fdb16d"), ObjectId("5f7f1c1b014b6a5711fdb16e")]  # Se deben reemplazar con los ObjectId correctos
             }
 
-            resultado = mongo.db.productos.insert_one(product)
+        # Verificar duplicados (por ejemplo, por nombre o clave) si es necesario
 
-            if resultado.inserted_id:
-                # Si la consulta es exitosa, devuelve los datos en formato JSON
-                return jsonify({"mensaje": "Documento insertado"})
-            else:
-                # Si no se pudo insertar el documento, devuelve un mensaje
-                return jsonify({"mensaje": "Documento no insertado"}), 404
+        # Insertar en la base de datos
+        resultado = mongo.db.productos.insert_one(product)
+
+        if resultado.inserted_id:
+            # Devolver el ID del producto insertado
+            return jsonify({"mensaje": "Documento insertado", "id": str(resultado.inserted_id)})
+        else:
+            return jsonify({"mensaje": "Documento no insertado"}), 404
 
     except Exception as e:
-        # Manejo de la excepción, puedes personalizar el mensaje de error según tus necesidades
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
     app.run(debug=True)
-
 
 # __________________________________________________________________________________________________________
 
@@ -158,10 +159,16 @@ def eliminar(id):
 
 # ____________________________________________________________________________________________________________
 #falta
+from flask import jsonify
+#http://127.0.0.1:4000/productos/actualizar/65b11507d66a2764b2c27419
 @prod.route('/productos/actualizar/<string:id>', methods=['PUT'])
 def actualizar_costo(id):
-    nuevo_costo = request.json['costo']
     try:
+        if request.content_type != 'application/json':
+            return jsonify({"error": "Unsupported Media Type: Content-Type must be 'application/json'"}), 415
+
+        nuevo_costo = request.json['costo']
+
         resultado = mongo.productos.update_one({'_id': ObjectId(id)}, {"$set": {'costo': nuevo_costo}})
         if resultado.modified_count:
             actualizar_precio(id, nuevo_costo)
@@ -170,10 +177,10 @@ def actualizar_costo(id):
             return jsonify({"mensaje": "Documento no encontrado"}), 404
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
+    
 def actualizar_precio(id, nuevo_costo):
     try:
-        nuevo_precio = nuevo_costo + (nuevo_costo * 0.2)  # Asumiendo un 20% de incremento en el precio
+        nuevo_precio = nuevo_costo + (nuevo_costo * 0.2)  # Assuming a 20% price increase
         resultado = mongo.db_administrator.productos.update_one({'_id': ObjectId(id)}, {'$set': {'precio': nuevo_precio}})
         if resultado.modified_count:
             return jsonify({"mensaje": "Precio actualizado"})
@@ -183,15 +190,15 @@ def actualizar_precio(id, nuevo_costo):
         return jsonify({"error": str(e)}), 500
 
 # ________________________________________________________________________________________________________________
-#http://192.168.1.67:4000/productos/prod_prov
+#http://127.0.0.1:4000/productos/prod_prov
 @prod.route('/productos/prod_prov', methods=['GET'])
 def obtener_prod_prov():
     query = [
         {
             '$lookup': {
                 'from': "proveedores",
-                'localField': "_id",
-                'foreignField': "idProveedor",
+                'localField': "provId",  # Assuming provId is the corresponding field in productos collection
+                'foreignField': "provId",
                 'as': "proveedor"
             }
         },
