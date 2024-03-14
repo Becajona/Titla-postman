@@ -4,7 +4,7 @@ from proveedores import prove
 from carrito import carrito
 from Usuario import usuario
 from cliente import client
-
+from marcas import marcas
 
 
 
@@ -14,6 +14,7 @@ app.register_blueprint(prove)
 app.register_blueprint(carrito)
 app.register_blueprint(usuario)
 app.register_blueprint(client)
+app.register_blueprint(marcas)
 
 
 
