@@ -84,59 +84,57 @@ def obtener_PorID(id):
 
 # ________________________________________________________________________________________________
 
-from flask import Flask, request, jsonify
-from flask_pymongo import PyMongo
-from bson import ObjectId
-from datetime import datetime
 
-app = Flask(__name__)
-app.config['MONGO_URI'] = 'mongodb+srv://ros:ros2021@cluster0.ymcp4od.mongodb.net/db_administrator?retryWrites=true&w=majority'
-mongo = PyMongo(app)
-
-@app.route('/productos/nuevoProd', methods=['POST'])
+@prod.route('/productos/nuevoProd', methods=['POST'])
 def add_producto():
     try:
-        data = request.json
+        data = request.get_json()
 
-        # Validación de campos requeridos
+        # Validate required fields
         required_fields = ['nombre', 'categoria', 'costo', 'precio', 'foto', 'fechaAdquisicion', 'cantidadExistente', 'estado', 'origen', 'provId', 'marcasId']
         if not all(field in data for field in required_fields):
-            return jsonify({"error": "Campos requeridos faltantes"}), 400
+            return jsonify({"error": "Missing required fields"}), 400
+        # Verificar que provId sea un ObjectId válido
+        
 
-        # Convertir fecha de adquisición
-        fecha_str_adq = {"$date": "2024-05-01T00:00:00Z"}
-        fechaAdq = datetime.utcfromtimestamp(int(fecha_str_adq) / 1000.0)
 
+        # Convert date (assuming 'fechaAdquisicion' is in ISO format)
+        fechaAdq = datetime.fromisoformat(data['fechaAdquisicion'])
+
+        # Check for duplicate product (e.g., by name)
+        if mongo.db.productos.find_one({"nombre": data['nombre']}):
+            return jsonify({"error": "Producto duplicado"}), 400
+
+        # Prepare product data
         product = {
-            "nombre": "Ejemplo de Producto",
-            "categoria": {"categoria": "Adultos", "tipo": "EjemploTipo"},
-            "costo": 50.0,
-            "precio": 89.99,
-            "foto": "ejemplo_producto.jpg",
+            "nombre": data['nombre'],
+            "categoria": data['categoria'],
+            "costo": data['costo'],
+            "precio": data['precio'],
+            "foto": data['foto'],
             "fechaAdquisicion": fechaAdq,
-            "cantidadExistente": 10.0,
-            "estado": "Vigente",
-            "origen": "Proveedor de Ejemplo",
-            "provId": ObjectId("5f7f1c1b014b6a5711fdb16c"),  # Se debe reemplazar con el ObjectId correcto
-            "marcasId": [ObjectId("5f7f1c1b014b6a5711fdb16d"), ObjectId("5f7f1c1b014b6a5711fdb16e")]  # Se deben reemplazar con los ObjectId correctos
-            }
+            "cantidadExistente": data['cantidadExistente'],
+            "estado": data['estado'],
+            "origen": data['origen'],
+            "provId": ObjectId(data['provId']),
+            "marcasId": [ObjectId(marca_id) for marca_id in data['marcasId']],
+        }
 
-        # Verificar duplicados (por ejemplo, por nombre o clave) si es necesario
+        # Insert into database
+        result = mongo.db.productos.insert_one(product)
 
-        # Insertar en la base de datos
-        resultado = mongo.db.productos.insert_one(product)
-
-        if resultado.inserted_id:
-            # Devolver el ID del producto insertado
-            return jsonify({"mensaje": "Documento insertado", "id": str(resultado.inserted_id)})
+        if result.inserted_id:
+            # Return success message and inserted product ID
+            return jsonify({"message": "Product inserted", "id": str(result.inserted_id)}), 201  # Created status code
         else:
-            return jsonify({"mensaje": "Documento no insertado"}), 404
+            return jsonify({"message": "Product not inserted"}), 500
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
     app.run(debug=True)
+
 
 # __________________________________________________________________________________________________________
 
