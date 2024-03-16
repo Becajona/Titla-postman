@@ -1,6 +1,8 @@
 from flask import Flask
 from config import MONGO_URI
 from mongo import mongo
+from app import mongo
+
 
 def create_app():
     app = Flask(__name__)
