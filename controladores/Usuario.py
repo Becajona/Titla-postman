@@ -1,77 +1,119 @@
-from mongo import mongo 
-from flask import Blueprint
+from flask import Blueprint, jsonify, request
 from bson.json_util import dumps
-from app import create_app
-from mongo import mongo 
-from flask import Blueprint
-from bson.json_util import dumps
-from flask import jsonify
-from bson import ObjectId
-from flask import request
+from mongo import mongo
+from flask import Blueprint, Flask, jsonify, request
+from flask_pymongo import PyMongo
+from bson import Decimal128, ObjectId
 from datetime import datetime
 
-usuario = Blueprint("usuario", __name__)
+from bson import Decimal128, ObjectId
+from bson import ObjectId
 
-@usuario.route('/usuario/get_all', methods=['GET'])
-def Lista_Client():
-    data = mongo.db.usuarios.find({})
-    r=dumps(data)
-    return r
+from flask import Blueprint, jsonify
+from flask_pymongo import PyMongo
 
-#http://192.168.1.67:4000/usuario/Jonathan/1234
-@usuario.route('/usuario/<email>/<password>', methods=['GET'])
-def Buscar_usuario(email, password):
+usuario = Blueprint("usuarios", __name__, url_prefix='/api/v1/usuarios')
+
+app = Flask(__name__)
+app.config['MONGO_URI'] = 'mongodb+srv://ros:ros2021@cluster0.ymcp4od.mongodb.net/db_administrator?retryWrites=true&w=majority'
+mongo = PyMongo(app)
+
+@usuario.route('/get_all', methods=['GET'])
+def listar_usuarios():
     try:
-        result = mongo.db.usuarios.find_one({"email": email, "password": password},{"_id":0,"email":1,"password":1, "rol":1})
-        if result:
-            return jsonify("mensaje", "True")
-        else:
-            return jsonify("mensaje", "false")
+        usuarios_cursor = mongo.db.usuario.find({})
+        usuarios_list = [usuario for usuario in usuarios_cursor]
+        for usuario in usuarios_list:
+            usuario['_id'] = str(usuario['_id'])
+        return jsonify(usuarios_list), 200
     except Exception as e:
-        return jsonify({"error", str(e)}), 500
+        return jsonify({"error": str(e)}), 500
     
     
-#http://192.168.1.67:4000/usuario/eliminar/65d697ee4206cb2d82c21a75  
-#Delete postman
-@usuario.route('/usuario/eliminar/<string:id>', methods=['DELETE'])
-def eliminar(id):
+@usuario.route('/nuevousuario', methods=['POST'])
+def agregar_nuevo_usuario():
     try:
-        resultado = mongo.db.usuarios.delete_one({'_id': ObjectId(id)})
+        data = request.get_json()
+
+        required_fields = ['email', 'password', 'rol']
+        if not all(field in data for field in required_fields):
+            return jsonify({"error": "Faltan campos requeridos"}), 400
+
+        usuario = {
+            "email": str(data['email']),
+            "password": str(data['password']),
+            "rol": str(data['rol'])
+        }
+
+        result = mongo.db.usuarios.insert_one(usuario)
+
+        if result.inserted_id:
+            return jsonify({"mensaje": "Usuario insertado", "id": str(result.inserted_id)}), 201
+        else:
+            return jsonify({"error": "Usuario no insertado"}), 500
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@usuario.route('/porID/<string:id>', methods=['GET'])
+def obtener_usuario_por_id(id):
+    try:
+        object_id = ObjectId(id)
+        
+        query = {'_id': object_id}
+
+        resultado = mongo.db.usuarios.find_one(query, {'_id': 0})  
+
         if resultado:
-            return jsonify ({"mensaje": "Documento Eliminado"})
+            return jsonify(resultado)
         else:
-            return jsonify({"mensaje": "Documento no encontrado"})
+            return jsonify({"error": "No se encontró ningún usuario con el ID proporcionado"}), 404
     except Exception as e:
-        return jsonify({"error": str(e)}),500
-    
-    
-#http://192.168.1.67:4000/proveedor/nuevoProd
-#postman post
-@usuario.route('/proveedor/nuevoProd', methods=['POST'])
-def add_producto():
+        return jsonify({"error": "Ha ocurrido un error"}), 500
+
+
+@usuario.route('/actualizar/<string:id>', methods=['PUT'])
+def actualizar_usuario_por_id(id):
     try:
-        n = request.json["nombre"]
-        c = request.json["contacto"]
-        po = request.json["direccion"]
-        co = request.json["correo_electronico"]
+        if request.content_type != 'application/json':
+            return jsonify({"error": "Unsupported Media Type: Content-Type must be 'application/json'"}), 415
 
-        if request.method == 'POST':
-            product = {
-                "nombre": n,
-                "contacto": c,
-                "direccion": po,
-                "correo_electronico": co
-            }
+        data = request.get_json()
 
-            resultado = mongo.db.proveedores.insert_one(product)
+        if '_id' in data:
+            del data['_id']
 
-            if resultado.inserted_id:
-                # Si la consulta es exitosa, devuelve los datos en formato JSON
-                return jsonify({"mensaje": "Documento insertado"})
-            else:
-                # Si no se pudo insertar el documento, devuelve un mensaje
-                return jsonify({"mensaje": "Documento no insertado"}), 404
+        # Validar campos requeridos
+        required_fields = ['email', 'password', 'rol']
+        if not all(field in data for field in required_fields):
+            return jsonify({"error": "Faltan campos requeridos"}), 400
 
+        usuario_actualizado = {
+            "email": str(data['email']),
+            "password": str(data['password']),
+            "rol": str(data['rol'])
+        }
+
+        resultado = mongo.db.usuarios.update_one({'_id': ObjectId(id)}, {"$set": usuario_actualizado})
+
+        if resultado.modified_count:
+            return jsonify({"mensaje": "Usuario actualizado"})
+        else:
+            return jsonify({"mensaje": "Usuario no encontrado"}), 404
     except Exception as e:
-        # Manejo de la excepción, puedes personalizar el mensaje de error según tus necesidades
+        return jsonify({"error": str(e)}), 500
+
+
+@usuario.route('/eliminar/<string:id>', methods=['DELETE'])
+def eliminar_usuario_por_id(id):
+    try:
+        str_id = str(id)
+        object_id = ObjectId(str_id)
+        resultado = mongo.db.usuarios.delete_one({'_id': object_id})
+        
+        if resultado.deleted_count:
+            return jsonify({"mensaje": "Usuario eliminado"})
+        else:
+            return jsonify({"mensaje": "Usuario no encontrado"}), 404
+    except Exception as e:
         return jsonify({"error": str(e)}), 500

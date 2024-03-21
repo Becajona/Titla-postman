@@ -1,126 +1,178 @@
 # productos.py
-from flask import Flask, jsonify, request
+from flask import Blueprint, Flask, jsonify, request
 from flask_pymongo import PyMongo
 from bson import Decimal128, ObjectId
 from datetime import datetime
-from flask import Flask, jsonify
-from flask_pymongo import PyMongo
-from bson import Decimal128, ObjectId
 
-from flask import Flask
-from flask_cors import CORS
+from bson import Decimal128, ObjectId
+from bson import ObjectId
+
+from flask import Blueprint, jsonify
+from flask_pymongo import PyMongo
+
+productos = Blueprint('productos', __name__, url_prefix='/api/v1/productos')
 
 app = Flask(__name__)
 app.config['MONGO_URI'] = 'mongodb+srv://ros:ros2021@cluster0.ymcp4od.mongodb.net/db_administrator?retryWrites=true&w=majority'
 mongo = PyMongo(app)
-cors = CORS(app, resources={r"/api/*": {"origins": "*"}})
-
-@app.route('/api/v1/productos/get_all', methods=['GET'])
-def listar_prod():
-    # Recuperar todos los productos de la colección 'productos'
-    productos_cursor = mongo.db.productos.find({})
-
-    # Convertir el cursor a una lista de diccionarios
-    productos = list(productos_cursor)
-
-    # Convertir los valores de Decimal128 a float
-    for producto in productos:
-        for key, value in producto.items():
-            if isinstance(value, Decimal128):
-                producto[key] = float(str(value))
-            elif isinstance(value, ObjectId):
-                producto[key] = str(value)
-
-    # Devolver los productos como JSON
-    return jsonify(productos)
-
-
-@app.route('/api/v1/productos/porID/<string:id>', methods=['GET'])
-def obtener_PorID(id):
+@productos.route('/get_all', methods=['GET'])
+def get_productos():
     try:
-        # Intenta convertir el ID a ObjectId
-        object_id = ObjectId(id)
+        productos_cursor = mongo.db.productos.find({})
+        productos_list = [producto for producto in productos_cursor]
+        
+        # Convertir el ID del producto a una cadena
+        for producto in productos_list:
+            producto['_id'] = str(producto['_id'])
 
-        # Construir la consulta para buscar el producto por su ID
-        query = {'_id': object_id}
+        # Agregar el ID del proveedor como una cadena si existe
+        for producto in productos_list:
+            if 'provId' in producto:
+                producto['provId'] = str(producto['provId'])
 
-        # Realizar la búsqueda en la colección 'productos'
-        resultado = mongo.db.productos.find_one(query)
+        return jsonify(productos_list), 200
 
-        if resultado:
-            # Convertir el ObjectId a una cadena
-            resultado['_id'] = str(resultado['_id'])
-            # Si la consulta es exitosa, devuelve los datos en formato JSON
-            return jsonify(resultado)
-        else:
-            # Si no se encuentra el documento, devuelve un mensaje adecuado
-            return jsonify({"error": "No se encontró ningún producto con el ID proporcionado"}), 404
     except Exception as e:
-        # Manejo de la excepción, indica que el ID proporcionado no es válido
-        return jsonify({"error": "El ID proporcionado no es válido"}), 400
+        return jsonify({"error": str(e)}), 500
 
 
+#CREAR
 
-
-@app.route('/api/v1/productos/nuevoProd', methods=['POST'])
-def add_producto():
+@productos.route('/nuevoProd', methods=['POST'])
+def agregar_nuevo_producto():
     try:
         data = request.get_json()
 
-        # Validar campos requeridos
-        required_fields = ['nombre', 'categoria', 'costo', 'precio', 'foto', 'fechaAdquisicion', 'cantidadExistente', 'estado', 'origen', 'provId', 'marcasId']
+        required_fields = ['nombre', 'categoria', 'marcasId', 'version', 'idiomas', 'jugadores', 'descripcion', 'costo', 'precio', 'foto', 'cantidadExistente', 'estado', 'origen', 'provId']
         if not all(field in data for field in required_fields):
             return jsonify({"error": "Faltan campos requeridos"}), 400
 
-        # Convertir la fecha (suponiendo que 'fechaAdquisicion' está en formato ISO)
-        fechaAdq = datetime.fromisoformat(data['fechaAdquisicion'])
+        # Convierte provId a ObjectId para buscar el proveedor en la base de datos
+        prov_id = ObjectId(data['provId'])
+        proveedor = mongo.db.proveedores.find_one({"_id": prov_id})
+        if not proveedor:
+            return jsonify({"error": "El proveedor especificado no existe"}), 400
 
-        # Verificar duplicado (por ejemplo, por nombre)
-        if mongo.db.productos.find_one({"nombre": data['nombre']}):
-            return jsonify({"error": "Producto duplicado"}), 400
-
-        # Verificar que provId sea un ObjectId válido
-        try:
-            prov_id = str(data['provId'])
-        except Exception as e:
-            return jsonify({"error": "El provId no es un string válido"}), 400
-
-        # Preparar los datos del producto
-        product = {
-            "_id": str(ObjectId()),
-            "clave": data.get('clave', ''), # Asegurarse de manejar el caso en que 'clave' no esté presente en los datos
-            "nombre": data['nombre'],
-            "categoria": data['categoria'],
-            "marcasId": data['marcasId'],
-            "version": data.get('version', ''), # Asegurarse de manejar el caso en que 'version' no esté presente en los datos
-            "idiomas": data.get('idiomas', []), # Asegurarse de manejar el caso en que 'idiomas' no esté presente en los datos
-            "jugadores": data.get('jugadores', 1), # Asegurarse de manejar el caso en que 'jugadores' no esté presente en los datos
-            "descripcion": data.get('descripcion', ''), # Asegurarse de manejar el caso en que 'descripcion' no esté presente en los datos
-            "costo": data['costo'],
-            "precio": data['precio'],
-            "foto": data['foto'],
-            "fechaAdquisicion": fechaAdq,
-            "fecharegistro": str(datetime.now()),
-            "cantidadExistente": data['cantidadExistente'],
-            "estado": data['estado'],
-            "origen": data['origen'],
-            "provId": prov_id,
+        # Crea el objeto de producto, convirtiendo provId a cadena
+        producto = {
+            "nombre": str(data['nombre']),
+            "categoria": str(data['categoria']),
+            "marcasId": str(data['marcasId']),
+            "version": str(data.get('version', '')), 
+            "idiomas": str(data['idiomas']),
+            "jugadores": int(data.get('jugadores', 1)), 
+            "descripcion": str(data.get('descripcion', '')), 
+            "costo": int(data['costo']),
+            "precio": int(data['precio']),
+            "foto": str(data['foto']),
+            "cantidadExistente": int(data['cantidadExistente']),
+            "estado": str(data['estado']),
+            "origen": str(data['origen']),
+            "provId": str(prov_id),  # Convierte el ObjectId a cadena
         }
 
-        # Insertar en la base de datos
-        result = mongo.db.productos.insert_one(product)
+        # Insertamos el producto en la base de datos
+        result = mongo.db.productos.insert_one(producto)
 
         if result.inserted_id:
-            # Devolver mensaje de éxito e ID del producto insertado
             return jsonify({"mensaje": "Producto insertado", "id": str(result.inserted_id)}), 201
         else:
             return jsonify({"error": "Producto no insertado"}), 500
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-    
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=4000, debug=True)
+
+
+
+@productos.route('/porID/<string:id>', methods=['GET'])
+def obtener_producto_por_id(id):
+    try:
+        object_id = ObjectId(id)
+
+        query = {'_id': object_id}
+
+        resultado = mongo.db.productos.find_one(query, {'_id': 0})  
+
+        if resultado:
+            # Convertir el ID del proveedor a una cadena si existe
+            if 'provId' in resultado:
+                resultado['provId'] = str(resultado['provId'])
+            
+            return jsonify(resultado)
+        else:
+            return jsonify({"error": "No se encontró ningún producto con el ID proporcionado"}), 404
+    except Exception as e:
+        return jsonify({"error": "Ha ocurrido un error"}), 500
 
     
     
+@productos.route('/actualizar/<string:id>', methods=['PUT'])
+def actualizar_producto(id):
+    try:
+        if request.content_type != 'application/json':
+            return jsonify({"error": "Unsupported Media Type: Content-Type must be 'application/json'"}), 415
+
+        data = request.get_json()
+
+       
+        if '_id' in data:
+            del data['_id']
+
+        
+        required_fields = ['nombre', 'categoria', 'version','idiomas','jugadores','descripcion','costo', 'precio', 'foto', 'cantidadExistente', 'estado', 'origen', 'provId', 'marcasId']
+        if not all(field in data for field in required_fields):
+            return jsonify({"error": "Faltan campos requeridos"}), 400
+
+
+        
+        producto_actualizado = { 
+            "nombre": str(data['nombre']),
+            "categoria": str(data['categoria']),
+            "marcasId": str(data['marcasId']),
+            "version": str(data.get('version', '')), 
+            "idiomas": str(data['idiomas']),
+            "jugadores": int(data.get('jugadores', 1)), 
+            "descripcion": str(data.get('descripcion', '')), 
+            "costo": int(data['costo']), 
+            "precio": int(data['precio']),  
+            "foto": str(data['foto']),
+            "cantidadExistente": int(data['cantidadExistente']),
+            "estado": str(data['estado']),
+            "origen": str(data['origen']),
+            "provId": str(data['provId']), 
+        }
+
+        
+        resultado = mongo.db.productos.update_one({'_id': ObjectId(id)}, {"$set": producto_actualizado})
+
+        if resultado.modified_count:
+            return jsonify({"mensaje": "Documento actualizado"})
+        else:
+            return jsonify({"mensaje": "Documento no encontrado"}), 404
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+
+
+#Eliminar
+@productos.route('/eliminar/<string:id>', methods=['DELETE'])
+def eliminar_producto(id):
+    try:
+        
+        str_id = str(id)
+
+        
+        object_id = ObjectId(str_id)
+
+       
+        resultado = mongo.db.productos.delete_one({'_id': object_id})
+        
+        if resultado.deleted_count:
+           
+            return jsonify({"mensaje": "Documento eliminado"})
+        else:
+            
+            return jsonify({"mensaje": "Documento no encontrado"}), 404
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
