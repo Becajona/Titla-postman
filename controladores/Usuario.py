@@ -20,14 +20,14 @@ mongo = PyMongo(app)
 
 @usuario.route('/get_all', methods=['GET'])
 def listar_usuarios():
-    try:
-        usuarios_cursor = mongo.db.usuario.find({})
-        usuarios_list = [usuario for usuario in usuarios_cursor]
-        for usuario in usuarios_list:
+    usuarios_cursor = mongo.db.usuarios.find({})
+    usuarios_list = [usuario for usuario in usuarios_cursor]
+        
+    for usuario in usuarios_list:
             usuario['_id'] = str(usuario['_id'])
-        return jsonify(usuarios_list), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    return jsonify(usuarios_list), 200
+       
+    
     
     
 @usuario.route('/nuevousuario', methods=['POST'])
@@ -73,7 +73,7 @@ def obtener_usuario_por_id(id):
 
 
 @usuario.route('/actualizar/<string:id>', methods=['PUT'])
-def actualizar_usuario_por_id(id):
+def actualizar_usuario(id):
     try:
         if request.content_type != 'application/json':
             return jsonify({"error": "Unsupported Media Type: Content-Type must be 'application/json'"}), 415

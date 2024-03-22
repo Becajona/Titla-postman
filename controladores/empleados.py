@@ -19,21 +19,28 @@ def listar_empleados():
     
     return jsonify(empleados_list)
 
+
+
+
+
+#empelafos nuevo
+
+
 @empleados.route('/nuevoempleado', methods=['POST'])
 def agregar_nuevo_empleado():
     try:
         data = request.get_json()
 
-        required_fields = ['Nombre', 'Edad', 'Genero', 'Salario', 'Telefono']
+        required_fields = ['nombre', 'edad', 'genero', 'salario', 'telefono']
         if not all(field in data for field in required_fields):
             return jsonify({"error": "Faltan campos requeridos"}), 400
 
         empleado = {
-            "Nombre": str(data['Nombre']),
-            "Edad": int(data['Edad']),
-            "Genero": str(data['Genero']),
-            "Salario": int(data['Salario']),
-            "Telefono": int(data['Telefono']),
+            "nombre": str(data['nombre']),
+            "edad": int(data['edad']),
+            "genero": str(data['genero']),
+            "salario": int(data['salario']),
+            "telefono": int(data['telefono']),
         }
 
         result = mongo.db.empleados.insert_one(empleado)
@@ -45,6 +52,9 @@ def agregar_nuevo_empleado():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+
     
     
     
@@ -66,7 +76,7 @@ def obtener_empleado_por_id(id):
     
     
 @empleados.route('/actualizar/<string:id>', methods=['PUT'])
-def actualizar_empleado_por_id(id):
+def actualizar_empleado(id):
     try:
         if request.content_type != 'application/json':
             return jsonify({"error": "Unsupported Media Type: Content-Type must be 'application/json'"}), 415
@@ -77,16 +87,16 @@ def actualizar_empleado_por_id(id):
             del data['_id']
 
         # Validar campos requeridos
-        required_fields = ['Nombre', 'Edad', 'Salario', 'Genero', 'Telefono']
+        required_fields = ['nombre', 'edad', 'salario', 'genero', 'telefono']
         if not all(field in data for field in required_fields):
             return jsonify({"error": "Faltan campos requeridos"}), 400
 
         empleado_actualizado = {
-            "Nombre": str(data['Nombre']),
-            "Edad": int(data['Edad']),
-            "Salario": int(data['Salario']),
-            "Genero": str(data['Genero']),
-            "Telefono": int(data['Telefono'])
+            "nombre": str(data['nombre']),
+            "edad": int(data['edad']),
+            "salario": int(data['salario']),
+            "genero": str(data['genero']),
+            "telefono": int(data['telefono'])
         }
 
         resultado = mongo.db.empleados.update_one({'_id': ObjectId(id)}, {"$set": empleado_actualizado})
@@ -100,7 +110,7 @@ def actualizar_empleado_por_id(id):
     
     
 @empleados.route('/eliminar/<string:id>', methods=['DELETE'])
-def eliminar_empleado_por_id(id):
+def eliminar_empleado(id):
     try:
         str_id = str(id)
 
